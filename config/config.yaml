@@ -1,0 +1,57 @@
+
+# NOMAD Experiment Watcher Configuration
+
+application:
+  name: "NOMAD Experiment Watcher"
+  version: "0.1.0"
+
+monitoring:
+  # Change this to your actual experimental data directory.
+  experimental_data_directory: "Experimental_Data"
+
+  # Periodic scan interval in seconds.
+  scan_interval_seconds: 30
+
+  # Whether to monitor filesystem events.
+  use_filesystem_events: true
+
+database:
+  # Stored locally on the computer running the watcher.
+  path: "database/watcher.db"
+
+logging:
+  level: "INFO"
+  path: "logs/watcher.log"
+
+experiment:
+  # Scientific metadata template.
+  default_material_system: "Cu-Zn-S"
+  default_substrate: "Fused silica"
+  default_deposition_method: "Sputtering"
+
+  expected_measurements:
+    - "RTP"
+    - "XRD"
+    - "Sulfurization"
+    - "Hyperspectral"
+
+
+archive:
+  # Generated ZIP files are stored outside Experimental_Data.
+  output_directory: "archive_cache"
+
+  # Wait until a measurement folder has been quiet.
+  quiet_period_seconds: 300
+
+  # Minimum time without file changes.
+  stability_period_seconds: 60
+
+  # ZIP compression.
+  compression_level: 6
+
+  # Measurement folder names and archive extensions.
+  measurement_types:
+    RTP: ".rtpzip"
+    XRD: ".xrdzip"
+    Sulfurization: ".sulfurzip"
+    Hyperspectral: ".hyperzip"

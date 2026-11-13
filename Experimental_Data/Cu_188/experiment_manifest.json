@@ -1,0 +1,45 @@
+{
+    "schema_version": "1.0",
+    "created_at": "2026-11-13T16:58:28.029243+00:00",
+    "local_path": "C:\\Users\\parch602\\Desktop\\nomad-experiment-watcher\\Experimental_Data\\Cu_188",
+    "experiment_id": "Cu_188",
+    "experiment_uuid": "6048f812-7d6b-4c9c-b120-aee0eb9c1037",
+    "nomad": {
+        "upload_id": null,
+        "upload_status": "NOT_CREATED",
+        "processing_status": "NOT_STARTED"
+    },
+    "experiment_status": "DISCOVERED",
+    "expected_measurements": [
+        "RTP",
+        "XRD",
+        "Sulfurization",
+        "Hyperspectral"
+    ],
+    "measurements": {
+        "RTP": {
+            "detected": false,
+            "uploaded": false,
+            "processed": false,
+            "entry_id": null
+        },
+        "XRD": {
+            "detected": false,
+            "uploaded": false,
+            "processed": false,
+            "entry_id": null
+        },
+        "Sulfurization": {
+            "detected": false,
+            "uploaded": false,
+            "processed": false,
+            "entry_id": null
+        },
+        "Hyperspectral": {
+            "detected": false,
+            "uploaded": false,
+            "processed": false,
+            "entry_id": null
+        }
+    }
+}

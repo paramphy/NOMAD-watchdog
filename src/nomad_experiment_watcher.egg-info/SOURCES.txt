@@ -1,0 +1,14 @@
+pyproject.toml
+src/nomad_experiment_watcher/config.py
+src/nomad_experiment_watcher/database.py
+src/nomad_experiment_watcher/main.py
+src/nomad_experiment_watcher.egg-info/PKG-INFO
+src/nomad_experiment_watcher.egg-info/SOURCES.txt
+src/nomad_experiment_watcher.egg-info/dependency_links.txt
+src/nomad_experiment_watcher.egg-info/requires.txt
+src/nomad_experiment_watcher.egg-info/top_level.txt
+src/nomad_experiment_watcher/experiments/__init__.py
+src/nomad_experiment_watcher/experiments/manager.py
+src/nomad_experiment_watcher/experiments/metadata.py
+src/nomad_experiment_watcher/monitoring/__init__.py
+src/nomad_experiment_watcher/monitoring/folder_monitor.py

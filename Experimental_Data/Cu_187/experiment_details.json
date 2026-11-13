@@ -1,0 +1,18 @@
+{
+    "experiment_id": "Cu_187",
+    "experiment_uuid": "e7247d5e-9ca6-46ef-a7b9-4c966c32114d",
+    "sample_id": "Cu_187",
+    "title": "Combinatorial thin film experiment Cu_187",
+    "description": "",
+    "researcher": "Paramesh Chandra",
+    "material_system": "Cu-Zn-S",
+    "substrate": "Fused silica",
+    "deposition_method": "Sputtering",
+    "deposition_date": "",
+    "measurements": [
+        "RTP",
+        "XRD",
+        "Sulfurization",
+        "Hyperspectral"
+    ]
+}

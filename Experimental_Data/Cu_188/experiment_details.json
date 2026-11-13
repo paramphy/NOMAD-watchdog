@@ -1,0 +1,18 @@
+{
+    "experiment_id": "Cu_188",
+    "experiment_uuid": "6048f812-7d6b-4c9c-b120-aee0eb9c1037",
+    "sample_id": "Cu_188",
+    "title": "Combinatorial thin film experiment Cu_188",
+    "description": "",
+    "researcher": "",
+    "material_system": "Cu-Zn-S",
+    "substrate": "Fused silica",
+    "deposition_method": "Sputtering",
+    "deposition_date": "",
+    "measurements": [
+        "RTP",
+        "XRD",
+        "Sulfurization",
+        "Hyperspectral"
+    ]
+}
