@@ -22,6 +22,9 @@ class WatcherConfig:
     archive_output_directory: Path
     archive_settings: dict
 
+    # NOMAD configuration
+    nomad_settings: dict
+
 
 def load_config(config_path: str | Path) -> WatcherConfig:
 
@@ -40,6 +43,7 @@ def load_config(config_path: str | Path) -> WatcherConfig:
     database = data.get("database", {})
     logging_config = data.get("logging", {})
     archive = data.get("archive", {})
+    nomad = data.get("nomad", {})
 
     experimental_directory = Path(
         monitoring["experimental_data_directory"]
@@ -114,5 +118,7 @@ def load_config(config_path: str | Path) -> WatcherConfig:
 
         archive_output_directory=archive_output_directory,
 
-        archive_settings=archive
+        archive_settings=archive,
+
+        nomad_settings=nomad
     )

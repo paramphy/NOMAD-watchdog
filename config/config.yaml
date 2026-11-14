@@ -55,3 +55,11 @@ archive:
     XRD: ".xrdzip"
     Sulfurization: ".sulfurzip"
     Hyperspectral: ".hyperzip"
+
+
+nomad:
+  upload_verification:
+    enabled: true
+    initial_delay_seconds: 2
+    retry_interval_seconds: 3
+    timeout_seconds: 60

@@ -1,0 +1,2 @@
+NOMAD Experiment Watcher verification test.
+Testing asynchronous file upload and verification.

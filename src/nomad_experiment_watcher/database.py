@@ -18,6 +18,7 @@ class WatcherDatabase:
     The database stores:
     1. Experiment registration and NOMAD upload information.
     2. Archive generation state for each measurement type.
+    3. NOMAD upload status for each generated archive.
     """
 
     def __init__(self, database_path: str | Path):
@@ -44,7 +45,6 @@ class WatcherDatabase:
         )
 
         connection.row_factory = sqlite3.Row
-
         connection.execute("PRAGMA foreign_keys = ON")
 
         return connection
@@ -76,7 +76,12 @@ class WatcherDatabase:
     # ---------------------------------------------------------
 
     def initialize_database(self):
-        """Create database tables and indexes if they do not exist."""
+        """
+        Create database tables and indexes if they do not exist.
+
+        Also performs safe schema migrations for existing databases.
+        Existing experiment and archive records are preserved.
+        """
 
         with self.connection() as connection:
 
@@ -134,6 +139,15 @@ class WatcherDatabase:
 
                     updated_at TEXT NOT NULL,
 
+                    upload_status TEXT NOT NULL
+                        DEFAULT 'NOT_UPLOADED',
+
+                    uploaded_checksum TEXT,
+
+                    upload_error TEXT,
+
+                    last_uploaded TEXT,
+
                     PRIMARY KEY (
                         experiment_uuid,
                         measurement_type
@@ -144,6 +158,51 @@ class WatcherDatabase:
                         ON DELETE CASCADE
                 )
             """)
+
+            # ---------------------------------------------
+            # DATABASE MIGRATION
+            # ---------------------------------------------
+            # Add upload-tracking columns to databases
+            # created before NOMAD upload integration.
+            #
+            # This does not delete or reset existing records.
+            # ---------------------------------------------
+
+            existing_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(archive_state)"
+                ).fetchall()
+            }
+
+            migrations = {
+
+                "upload_status": (
+                    "ALTER TABLE archive_state "
+                    "ADD COLUMN upload_status TEXT "
+                    "NOT NULL DEFAULT 'NOT_UPLOADED'"
+                ),
+
+                "uploaded_checksum": (
+                    "ALTER TABLE archive_state "
+                    "ADD COLUMN uploaded_checksum TEXT"
+                ),
+
+                "upload_error": (
+                    "ALTER TABLE archive_state "
+                    "ADD COLUMN upload_error TEXT"
+                ),
+
+                "last_uploaded": (
+                    "ALTER TABLE archive_state "
+                    "ADD COLUMN last_uploaded TEXT"
+                ),
+            }
+
+            for column_name, migration_sql in migrations.items():
+
+                if column_name not in existing_columns:
+                    connection.execute(migration_sql)
 
             # ---------------------------------------------
             # INDEXES
@@ -157,6 +216,11 @@ class WatcherDatabase:
             connection.execute("""
                 CREATE INDEX IF NOT EXISTS idx_archive_status
                 ON archive_state(archive_status)
+            """)
+
+            connection.execute("""
+                CREATE INDEX IF NOT EXISTS idx_upload_status
+                ON archive_state(upload_status)
             """)
 
     # ---------------------------------------------------------
@@ -327,6 +391,8 @@ class WatcherDatabase:
         Existing generated fingerprint and checksum are preserved
         during an update. They describe the last successfully
         generated archive, not the current source files.
+
+        Existing NOMAD upload information is also preserved.
         """
 
         now = utc_now()
@@ -442,5 +508,168 @@ class WatcherDatabase:
                 raise ValueError(
                     "Cannot mark archive as generated: "
                     f"no archive state exists for "
+                    f"{experiment_uuid} / {measurement_type}"
+                )
+
+    # ---------------------------------------------------------
+    # NOMAD UPLOAD MANAGEMENT
+    # ---------------------------------------------------------
+
+    def set_nomad_upload_id(
+        self,
+        experiment_uuid,
+        upload_id
+    ):
+        """
+        Store the NOMAD upload ID for an experiment.
+
+        One NOMAD upload is reused for all measurement archives
+        belonging to the same experiment.
+        """
+
+        now = utc_now()
+
+        with self.connection() as connection:
+
+            cursor = connection.execute(
+                """
+                UPDATE experiments
+
+                SET
+                    nomad_upload_id = ?,
+                    updated_at = ?
+
+                WHERE experiment_uuid = ?
+                """,
+                (
+                    upload_id,
+                    now,
+                    experiment_uuid
+                )
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    f"Experiment not found: {experiment_uuid}"
+                )
+
+    def mark_archive_upload_started(
+        self,
+        experiment_uuid,
+        measurement_type
+    ):
+        """Mark an archive as currently being uploaded."""
+
+        now = utc_now()
+
+        with self.connection() as connection:
+
+            cursor = connection.execute(
+                """
+                UPDATE archive_state
+
+                SET
+                    upload_status = 'UPLOADING',
+                    upload_error = NULL,
+                    updated_at = ?
+
+                WHERE experiment_uuid = ?
+                AND measurement_type = ?
+                """,
+                (
+                    now,
+                    experiment_uuid,
+                    measurement_type
+                )
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    "Cannot start upload: archive state not found for "
+                    f"{experiment_uuid} / {measurement_type}"
+                )
+
+    def mark_archive_uploaded(
+        self,
+        experiment_uuid,
+        measurement_type,
+        uploaded_checksum
+    ):
+        """
+        Mark an archive as successfully uploaded and verified.
+
+        The uploaded checksum records the exact local archive
+        version that was successfully uploaded.
+        """
+
+        now = utc_now()
+
+        with self.connection() as connection:
+
+            cursor = connection.execute(
+                """
+                UPDATE archive_state
+
+                SET
+                    upload_status = 'UPLOADED',
+                    uploaded_checksum = ?,
+                    upload_error = NULL,
+                    last_uploaded = ?,
+                    updated_at = ?
+
+                WHERE experiment_uuid = ?
+                AND measurement_type = ?
+                """,
+                (
+                    uploaded_checksum,
+                    now,
+                    now,
+                    experiment_uuid,
+                    measurement_type
+                )
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    "Cannot record upload: archive state not found for "
+                    f"{experiment_uuid} / {measurement_type}"
+                )
+
+    def mark_archive_upload_failed(
+        self,
+        experiment_uuid,
+        measurement_type,
+        error_message
+    ):
+        """Record a failed NOMAD upload without losing prior success."""
+
+        now = utc_now()
+
+        with self.connection() as connection:
+
+            cursor = connection.execute(
+                """
+                UPDATE archive_state
+
+                SET
+                    upload_status = 'FAILED',
+                    upload_error = ?,
+                    updated_at = ?
+
+                WHERE experiment_uuid = ?
+                AND measurement_type = ?
+                """,
+                (
+                    str(error_message),
+                    now,
+                    experiment_uuid,
+                    measurement_type
+                )
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(
+                    "Cannot record upload failure: archive state "
+                    "not found for "
                     f"{experiment_uuid} / {measurement_type}"
                 )

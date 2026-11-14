@@ -3,12 +3,11 @@
 NOMAD uploader for NOMAD Experiment Watcher.
 
 Responsibilities:
-- Create an upload in NOMAD.
-- Upload individual files into an existing upload.
+- Create NOMAD uploads.
+- Upload individual files.
+- Verify uploaded files.
 - Upload multiple files sequentially.
-- Retrieve upload information.
-- Validate local files and remote paths.
-- Provide useful logging and error messages.
+- Retrieve upload information and entries.
 
 Authentication and HTTP communication are handled by NomadClient.
 """
@@ -16,7 +15,8 @@ Authentication and HTTP communication are handled by NomadClient.
 from __future__ import annotations
 
 import logging
-import os
+import time
+
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote
@@ -27,29 +27,25 @@ class NomadUploadError(Exception):
 
 
 class NomadUploader:
-    """
-    Handles file uploads to a NOMAD Oasis.
+    """Handles file uploads to a NOMAD Oasis."""
 
-    Parameters
-    ----------
-    client:
-        An initialized NomadClient instance.
-    logger:
-        Optional logger instance.
-    """
-
-    def __init__(self, client, logger=None):
+    def __init__(
+        self,
+        client,
+        logger=None,
+        verification_settings=None,
+    ):
         self.client = client
         self.logger = logger or logging.getLogger(__name__)
 
+        self.verification_settings = verification_settings or {}
+
     # ---------------------------------------------------------
-    # Internal validation helpers
+    # Validation helpers
     # ---------------------------------------------------------
 
     @staticmethod
     def _validate_upload_id(upload_id: str) -> str:
-        """Validate and normalize a NOMAD upload ID."""
-
         if not isinstance(upload_id, str) or not upload_id.strip():
             raise ValueError("upload_id must be a non-empty string.")
 
@@ -57,8 +53,6 @@ class NomadUploader:
 
     @staticmethod
     def _validate_upload_name(upload_name: str) -> str:
-        """Validate the upload name."""
-
         if not isinstance(upload_name, str) or not upload_name.strip():
             raise ValueError("upload_name must be a non-empty string.")
 
@@ -66,12 +60,6 @@ class NomadUploader:
 
     @staticmethod
     def _validate_remote_directory(remote_directory: str) -> str:
-        """
-        Validate a directory path inside a NOMAD upload.
-
-        NOMAD uses forward slashes for paths, including on Windows.
-        Empty string means the root directory.
-        """
 
         if remote_directory is None:
             return ""
@@ -86,23 +74,19 @@ class NomadUploader:
 
         path = PurePosixPath(normalized)
 
-        if path.is_absolute():
-            raise ValueError("Absolute remote paths are not allowed.")
-
-        if any(part in ("..", ".") for part in path.parts):
-            raise ValueError("Remote directory cannot contain '.' or '..'.")
+        if path.is_absolute() or any(
+            part in (".", "..") for part in path.parts
+        ):
+            raise ValueError("Invalid remote directory.")
 
         return path.as_posix()
 
     @staticmethod
     def _extract_upload_id(response: Any) -> str:
-        """
-        Extract upload_id from different possible NOMAD response layouts.
-        """
 
         if not isinstance(response, dict):
             raise NomadUploadError(
-                f"Unexpected response while creating upload: {response!r}"
+                f"Unexpected NOMAD response: {response!r}"
             )
 
         upload_id = response.get("upload_id")
@@ -112,8 +96,7 @@ class NomadUploader:
 
         if not upload_id:
             raise NomadUploadError(
-                "NOMAD response did not contain an upload_id. "
-                f"Response: {response!r}"
+                "NOMAD response did not contain an upload_id."
             )
 
         return str(upload_id)
@@ -127,23 +110,6 @@ class NomadUploader:
         upload_name: str,
         auto_decompress: bool = False,
     ) -> str:
-        """
-        Create a new empty NOMAD upload.
-
-        Parameters
-        ----------
-        upload_name:
-            Name assigned to the NOMAD upload.
-
-        auto_decompress:
-            Whether NOMAD should automatically decompress uploaded
-            ZIP or TAR files. Defaults to False.
-
-        Returns
-        -------
-        str
-            Newly created NOMAD upload ID.
-        """
 
         upload_name = self._validate_upload_name(upload_name)
 
@@ -152,31 +118,156 @@ class NomadUploader:
             upload_name,
         )
 
-        try:
-            response = self.client.request(
-                method="POST",
-                endpoint="/uploads",
-                params={
-                    "upload_name": upload_name,
-                    "auto_decompress": auto_decompress,
-                },
+        response = self.client.request(
+            method="POST",
+            endpoint="/uploads",
+            params={
+                "upload_name": upload_name,
+                "auto_decompress": auto_decompress,
+            },
+        )
+
+        upload_id = self._extract_upload_id(response)
+
+        self.logger.info(
+            "NOMAD upload created. Upload ID: %s",
+            upload_id,
+        )
+
+        return upload_id
+
+    # ---------------------------------------------------------
+    # Verify uploaded file
+    # ---------------------------------------------------------
+
+    def verify_uploaded_file(
+        self,
+        upload_id: str,
+        filename: str,
+        remote_directory: str = "",
+        expected_size: int | None = None,
+        initial_delay_seconds: float = 2,
+        retry_interval_seconds: float = 3,
+        timeout_seconds: float = 60,
+    ) -> dict:
+
+        upload_id = self._validate_upload_id(upload_id)
+
+        remote_directory = self._validate_remote_directory(
+            remote_directory
+        )
+
+        if not isinstance(filename, str) or not filename:
+            raise ValueError("filename must be a non-empty string.")
+
+        if Path(filename).name != filename:
+            raise ValueError("filename must contain only a filename.")
+
+        if initial_delay_seconds < 0:
+            raise ValueError("Initial delay cannot be negative.")
+
+        if retry_interval_seconds <= 0:
+            raise ValueError("Retry interval must be positive.")
+
+        if timeout_seconds <= 0:
+            raise ValueError("Timeout must be positive.")
+
+        if expected_size is not None and expected_size < 0:
+            raise ValueError("Expected file size cannot be negative.")
+
+        encoded_upload_id = quote(upload_id, safe="")
+
+        if remote_directory:
+            encoded_directory = quote(remote_directory, safe="/")
+            endpoint = (
+                f"/uploads/{encoded_upload_id}"
+                f"/rawdir/{encoded_directory}"
+            )
+        else:
+            endpoint = (
+                f"/uploads/{encoded_upload_id}/rawdir/"
             )
 
-            upload_id = self._extract_upload_id(response)
+        self.logger.info(
+            "Waiting for remote file verification: %s",
+            filename,
+        )
+
+        start_time = time.monotonic()
+        deadline = start_time + timeout_seconds
+
+        time.sleep(
+            min(initial_delay_seconds, timeout_seconds)
+        )
+
+        attempt = 0
+
+        while time.monotonic() < deadline:
+
+            attempt += 1
+
+            response = self.client.request(
+                method="GET",
+                endpoint=endpoint,
+            )
+
+            directory_metadata = response.get(
+                "directory_metadata", {}
+            )
+
+            contents = directory_metadata.get("content", [])
+
+            for item in contents:
+
+                if (
+                    item.get("name") == filename
+                    and item.get("is_file") is True
+                ):
+
+                    remote_size = item.get("size")
+
+                    if (
+                        expected_size is not None
+                        and remote_size != expected_size
+                    ):
+                        self.logger.warning(
+                            "Remote file size does not match. "
+                            "Expected: %s, received: %s",
+                            expected_size,
+                            remote_size,
+                        )
+                        break
+
+                    self.logger.info(
+                        "Remote file verified: %s (%s bytes)",
+                        filename,
+                        remote_size,
+                    )
+
+                    return item
+
+            elapsed = time.monotonic() - start_time
 
             self.logger.info(
-                "NOMAD upload created successfully. Upload ID: %s",
-                upload_id,
+                "File not visible yet. Attempt %d. "
+                "Elapsed: %.1f seconds.",
+                attempt,
+                elapsed,
             )
 
-            return upload_id
+            remaining = deadline - time.monotonic()
 
-        except Exception:
-            self.logger.exception(
-                "Failed to create NOMAD upload: %s",
-                upload_name,
+            if remaining <= 0:
+                break
+
+            time.sleep(
+                min(retry_interval_seconds, remaining)
             )
-            raise
+
+        raise NomadUploadError(
+            f"File verification timed out after "
+            f"{timeout_seconds} seconds: {filename}"
+        )
 
     # ---------------------------------------------------------
     # Upload one file
@@ -188,37 +279,7 @@ class NomadUploader:
         local_path: str | Path,
         remote_directory: str = "",
         auto_decompress: bool = False,
-    ) -> Any:
-        """
-        Upload one local file into an existing NOMAD upload.
-
-        Uses:
-            POST /uploads/{upload_id}/raw/{remote_directory}
-
-        Multipart field:
-            file
-
-        Parameters
-        ----------
-        upload_id:
-            Existing NOMAD upload ID.
-
-        local_path:
-            Path to the local file.
-
-        remote_directory:
-            Destination directory inside the NOMAD upload.
-            Empty string means root directory.
-
-        auto_decompress:
-            Whether NOMAD should decompress ZIP/TAR files.
-            Defaults to False to preserve the archive itself.
-
-        Returns
-        -------
-        dict or str
-            NOMAD API response.
-        """
+    ) -> dict:
 
         upload_id = self._validate_upload_id(upload_id)
         local_path = Path(local_path)
@@ -230,7 +291,7 @@ class NomadUploader:
 
         if not local_path.is_file():
             raise ValueError(
-                f"Expected a file, received: {local_path}"
+                f"Expected a file: {local_path}"
             )
 
         remote_directory = self._validate_remote_directory(
@@ -240,7 +301,6 @@ class NomadUploader:
         file_size_before = local_path.stat().st_size
         modified_before = local_path.stat().st_mtime_ns
 
-        # Construct the NOMAD endpoint.
         encoded_upload_id = quote(upload_id, safe="")
 
         if remote_directory:
@@ -252,29 +312,27 @@ class NomadUploader:
             f"/uploads/{encoded_upload_id}/raw/{encoded_directory}"
         )
 
-        params = {
-            "auto_decompress": auto_decompress,
-        }
-
         self.logger.info(
-            "Uploading file: %s (%s bytes)",
+            "Uploading file: %s (%d bytes)",
             local_path.name,
             file_size_before,
         )
 
         self.logger.info(
-            "NOMAD destination: upload=%s, directory=%s",
-            upload_id,
+            "NOMAD destination: %s",
             remote_directory or "/",
         )
 
         try:
+
             with local_path.open("rb") as file_handle:
 
                 response = self.client.request(
                     method="PUT",
                     endpoint=endpoint,
-                    params=params,
+                    params={
+                        "auto_decompress": auto_decompress,
+                    },
                     files={
                         "file": (
                             local_path.name,
@@ -284,7 +342,7 @@ class NomadUploader:
                     },
                 )
 
-            # Check whether the local file changed during transfer.
+            # Ensure the local file did not change during transfer.
             stat_after = local_path.stat()
 
             if (
@@ -292,16 +350,39 @@ class NomadUploader:
                 or stat_after.st_mtime_ns != modified_before
             ):
                 raise NomadUploadError(
-                    f"Local file changed during upload: {local_path}. "
-                    "The remote copy may need to be replaced."
+                    f"Local file changed during upload: {local_path}"
                 )
 
             self.logger.info(
-                "File uploaded successfully: %s",
+                "NOMAD accepted upload request: %s",
                 local_path.name,
             )
 
-            return response
+            remote_metadata = None
+
+            if self.verification_settings.get("enabled", True):
+
+                remote_metadata = self.verify_uploaded_file(
+                    upload_id=upload_id,
+                    filename=local_path.name,
+                    remote_directory=remote_directory,
+                    expected_size=file_size_before,
+                    initial_delay_seconds=self.verification_settings.get(
+                        "initial_delay_seconds", 2
+                    ),
+                    retry_interval_seconds=self.verification_settings.get(
+                        "retry_interval_seconds", 3
+                    ),
+                    timeout_seconds=self.verification_settings.get(
+                        "timeout_seconds", 60
+                    ),
+                )
+
+            return {
+                "upload_response": response,
+                "verified": remote_metadata is not None,
+                "remote_metadata": remote_metadata,
+            }
 
         except Exception:
             self.logger.exception(
@@ -322,32 +403,6 @@ class NomadUploader:
         auto_decompress: bool = False,
         fail_fast: bool = True,
     ) -> list[dict[str, Any]]:
-        """
-        Upload multiple files sequentially.
-
-        Parameters
-        ----------
-        upload_id:
-            Existing NOMAD upload ID.
-
-        local_paths:
-            Iterable of local file paths.
-
-        remote_directory:
-            Destination directory inside NOMAD.
-
-        auto_decompress:
-            Whether NOMAD should decompress ZIP/TAR files.
-
-        fail_fast:
-            If True, stop immediately when one upload fails.
-            If False, continue and record failures.
-
-        Returns
-        -------
-        list of dict
-            Result for each file.
-        """
 
         paths = [Path(path) for path in local_paths]
 
@@ -355,12 +410,12 @@ class NomadUploader:
             self.logger.warning("No files supplied for upload.")
             return []
 
+        results = []
+
         self.logger.info(
             "Starting batch upload: %d files",
             len(paths),
         )
-
-        results = []
 
         for index, local_path in enumerate(paths, start=1):
 
@@ -372,6 +427,7 @@ class NomadUploader:
             )
 
             try:
+
                 response = self.upload_file(
                     upload_id=upload_id,
                     local_path=local_path,
@@ -402,9 +458,6 @@ class NomadUploader:
                 })
 
                 if fail_fast:
-                    self.logger.error(
-                        "Stopping batch upload because fail_fast=True."
-                    )
                     raise
 
         successful = sum(
@@ -427,52 +480,25 @@ class NomadUploader:
     # ---------------------------------------------------------
 
     def get_upload_information(self, upload_id: str) -> dict:
-        """
-        Retrieve metadata and status for an existing NOMAD upload.
-        """
 
         upload_id = self._validate_upload_id(upload_id)
 
-        self.logger.info(
-            "Retrieving NOMAD upload information: %s",
-            upload_id,
+        return self.client.request(
+            method="GET",
+            endpoint=f"/uploads/{quote(upload_id, safe='')}",
         )
-
-        try:
-            return self.client.request(
-                method="GET",
-                endpoint=f"/uploads/{quote(upload_id, safe='')}",
-            )
-
-        except Exception:
-            self.logger.exception(
-                "Could not retrieve upload information: %s",
-                upload_id,
-            )
-            raise
 
     # ---------------------------------------------------------
     # Retrieve upload entries
     # ---------------------------------------------------------
 
     def get_upload_entries(self, upload_id: str) -> dict:
-        """
-        Retrieve entries associated with an existing upload.
-        """
 
         upload_id = self._validate_upload_id(upload_id)
 
-        try:
-            return self.client.request(
-                method="GET",
-                endpoint=(
-                    f"/uploads/{quote(upload_id, safe='')}/entries"
-                ),
-            )
-
-        except Exception:
-            self.logger.exception(
-                "Could not retrieve entries for upload: %s",
-                upload_id,
-            )
-            raise
+        return self.client.request(
+            method="GET",
+            endpoint=(
+                f"/uploads/{quote(upload_id, safe='')}/entries"
+            ),
+        )
