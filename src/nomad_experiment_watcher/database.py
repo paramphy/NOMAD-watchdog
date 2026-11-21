@@ -174,6 +174,34 @@ class WatcherDatabase:
 
             self._add_column_if_missing(
                 connection,
+                "experiments",
+                "nomad_upload_status",
+                "TEXT NOT NULL DEFAULT 'NOT_CREATED'",
+            )
+
+            self._add_column_if_missing(
+                connection,
+                "experiments",
+                "nomad_upload_error",
+                "TEXT",
+            )
+
+            self._add_column_if_missing(
+                connection,
+                "experiments",
+                "nomad_upload_attempted_at",
+                "TEXT",
+            )
+
+            self._add_column_if_missing(
+                connection,
+                "experiments",
+                "processing_status",
+                "TEXT NOT NULL DEFAULT 'NOT_STARTED'",
+            )
+
+            self._add_column_if_missing(
+                connection,
                 "archive_state",
                 "upload_status",
                 "TEXT NOT NULL DEFAULT 'NOT_UPLOADED'",
@@ -333,6 +361,74 @@ class WatcherDatabase:
 
         return [dict(row) for row in rows]
 
+    def get_archive_states(self, experiment_uuid: str) -> list[dict]:
+        """Return all measurement archive states for one experiment."""
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM archive_state
+                WHERE experiment_uuid = ?
+                ORDER BY measurement_type
+                """,
+                (experiment_uuid,),
+            ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    def update_nomad_upload_state(
+        self,
+        experiment_uuid: str,
+        status: str,
+        error_message: str | None = None,
+        record_attempt: bool = False,
+    ) -> None:
+        """Update the experiment-level NOMAD upload lifecycle state."""
+        now = utc_now()
+        attempted_at = now if record_attempt else None
+
+        with self.connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE experiments
+                SET nomad_upload_status = ?,
+                    nomad_upload_error = ?,
+                    nomad_upload_attempted_at =
+                        COALESCE(?, nomad_upload_attempted_at),
+                    updated_at = ?
+                WHERE experiment_uuid = ?
+                """,
+                (
+                    status,
+                    str(error_message)[:4000] if error_message else None,
+                    attempted_at,
+                    now,
+                    experiment_uuid,
+                ),
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"Experiment not found: {experiment_uuid}")
+
+    def set_processing_status(
+        self,
+        experiment_uuid: str,
+        status: str,
+    ) -> None:
+        """Persist the experiment-level NOMAD processing status."""
+        with self.connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE experiments
+                SET processing_status = ?, updated_at = ?
+                WHERE experiment_uuid = ?
+                """,
+                (status, utc_now(), experiment_uuid),
+            )
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"Experiment not found: {experiment_uuid}")
+
     def set_nomad_upload_id(
         self,
         experiment_uuid: str,
@@ -376,6 +472,8 @@ class WatcherDatabase:
                 """
                 UPDATE experiments
                 SET nomad_upload_id = ?,
+                    nomad_upload_status = 'CREATED',
+                    nomad_upload_error = NULL,
                     updated_at = ?
                 WHERE experiment_uuid = ?
                 """,

@@ -1,0 +1,45 @@
+NOMAD Experiment Watcher - source patch
+=========================================
+
+Apply
+-----
+1. Stop the watcher.
+2. Back up the project folder (especially database/watcher.db).
+3. Extract this ZIP into the existing project root, preserving folder paths.
+   Allow it to overwrite the included source/config/documentation files.
+4. Do NOT replace or delete database/watcher.db, Experimental_Data, archive_cache,
+   or logs. They are intentionally not included in this patch.
+5. Copy .env.example to .env in the project root.
+6. Put your PAT in .env as NOMAD_PAT=...
+7. Verify nomad.base_url in config/config.yaml is still the active API URL.
+8. From the project root run: pip install -e .
+9. Start the watcher again.
+
+Security
+--------
+.env is plain text and is excluded from Git. Do not share it or commit it.
+Use Windows file permissions to restrict access. For a managed deployment,
+prefer Windows Credential Manager.
+
+Behaviour
+---------
+- The API URL is read from config/config.yaml.
+- The PAT is loaded from .env (or an existing environment variable).
+- A NOMAD upload is created at experiment discovery if one does not exist.
+- Existing upload IDs in SQLite are reused.
+- The local manifest is synchronized after discovery and after measurement
+  scans, including source detection and upload completion.
+- File upload verification remains existence + file-size verification;
+  it is not remote SHA-256 verification.
+- NOMAD processing and entry-ID retrieval are not included in this phase.
+- Automatic publishing remains disabled.
+
+Validation performed
+--------------------
+- Python compile checks passed for source and manual test scripts.
+- SQLite additive migration tested on a COPY of the supplied database;
+  existing experiment records were preserved.
+- Local integration smoke test with a fake uploader passed:
+  one upload created at discovery, reused on rediscovery, measurement
+  detected, archive uploaded, and manifest updated.
+- No live NOMAD request was made during this patch validation.

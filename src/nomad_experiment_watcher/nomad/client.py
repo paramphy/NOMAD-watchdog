@@ -8,22 +8,19 @@ Responsibilities:
 - Handle responses and API errors consistently.
 - Provide convenience methods for common GET endpoints.
 
-This module does not create uploads or upload files yet.
+Upload creation and file transfer are implemented by NomadUploader.
 """
 
 from __future__ import annotations
 
 import os
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import requests
 
 
-DEFAULT_NOMAD_URL = (
-    "https://enter-hay-gel-magazine.trycloudflare.com"
-    "/nomad-oasis/api/v1"
-)
+DEFAULT_NOMAD_URL = None
 
 
 class NomadAPIError(Exception):
@@ -73,12 +70,14 @@ class NomadClient:
         # 1. Read configuration
         # --------------------------------------------------
 
-        self.base_url = (
-            base_url
-            or os.getenv("NOMAD_URL")
-            or DEFAULT_NOMAD_URL
-        ).rstrip("/")
+        configured_url = base_url or os.getenv("NOMAD_URL") or DEFAULT_NOMAD_URL
+        if not configured_url:
+            raise ValueError(
+                "NOMAD base_url is not configured. Set nomad.base_url "
+                "in config/config.yaml."
+            )
 
+        self.base_url = configured_url.rstrip("/")
         self.token = token or os.getenv("NOMAD_PAT")
 
         self.timeout = timeout
@@ -90,8 +89,8 @@ class NomadClient:
 
         if not self.token:
             raise ValueError(
-                "NOMAD_PAT is not configured. "
-                "Set the environment variable or pass a token."
+                "NOMAD PAT is not configured. Check the configured "
+                "token environment variable or the local .env file."
             )
 
         parsed_url = urlsplit(self.base_url)
@@ -293,7 +292,7 @@ class NomadClient:
 
         return self.request(
             "GET",
-            f"/uploads/{upload_id}",
+            f"/uploads/{quote(upload_id, safe='')}",
         )
 
     def get_upload_entries(
@@ -305,7 +304,7 @@ class NomadClient:
 
         return self.request(
             "GET",
-            f"/uploads/{upload_id}/entries",
+            f"/uploads/{quote(upload_id, safe='')}/entries",
             params=params,
         )
 

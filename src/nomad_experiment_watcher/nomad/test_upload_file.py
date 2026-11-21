@@ -5,9 +5,9 @@ from urllib.parse import quote
 import hashlib
 import json
 
-from nomad_experiment_watcher.nomad import (
-    NomadClient,
-    NomadUploader,
+from nomad_experiment_watcher.nomad import NomadUploader
+from nomad_experiment_watcher.nomad.configured_client import (
+    create_configured_client,
 )
 
 
@@ -56,9 +56,14 @@ print("SHA256:", local_checksum)
 # CONNECT TO NOMAD
 # ---------------------------------------------------------
 
-with NomadClient() as client:
-
-    uploader = NomadUploader(client)
+config, client = create_configured_client()
+try:
+    uploader = NomadUploader(
+        client,
+        verification_settings=config.nomad_settings.get(
+            "upload_verification", {}
+        ),
+    )
 
     print("\nConnected to NOMAD.")
 
@@ -131,3 +136,5 @@ with NomadClient() as client:
     print("Remote size:", remote_size)
     print("SHA256 (local):", local_checksum)
     print("====================================")
+finally:
+    client.close()

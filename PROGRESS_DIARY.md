@@ -436,3 +436,30 @@ and output, result, decisions made, and remaining questions.
 -   The next action is to inspect the current configuration and
     establish a minimal authenticated connection to the remote NOMAD
     Oasis server.
+
+### 17 November 2026 --- NOMAD configuration and manifest synchronisation
+
+**Implemented in the current source revision:**
+
+- NOMAD API base URL moved from `client.py` into `config/config.yaml`.
+- PAT loaded from a local `.env` file through `python-dotenv`; `.env`
+  remains excluded from Git. The PAT is not stored in YAML or logged.
+- NOMAD upload creation moved to experiment discovery so each registered
+  experiment gets one reusable upload ID before its first archive is ready.
+- SQLite tracks experiment-level NOMAD upload status, last attempt,
+  creation error, and processing status through additive migrations.
+- `experiment_manifest.json` is synchronised from SQLite after discovery
+  and after each periodic measurement scan. It records detection,
+  source-file count, archive state, upload status, and upload timestamps.
+- ArchiveManager reuses the upload ID created by ExperimentManager.
+- Automatic publishing remains disabled.
+
+**Important diagnostic from the supplied watcher log:** at 10:15 on
+17 November, the watcher reported that `NOMAD_PAT` was not configured,
+and explicitly disabled automatic uploads for that session. This was
+the immediate cause of the no-upload behaviour in that run.
+
+**Validation still required on the user's Windows machine:** install the
+updated dependency, create the local `.env`, verify the configured
+Cloudflare URL is still current, restart the watcher, and confirm that
+the manifest receives an upload ID and that a test archive is uploaded.
