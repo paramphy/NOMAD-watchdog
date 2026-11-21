@@ -18,6 +18,7 @@ class ExperimentManager:
         database,
         experiment_settings,
         nomad_uploader=None,
+        coauthor_group_id: str | None = None,
         upload_retry_interval_seconds: float = 300,
     ):
         self.database = database
@@ -27,13 +28,56 @@ class ExperimentManager:
             0.0, float(upload_retry_interval_seconds)
         )
         self._lock = threading.RLock()
+        self.coauthor_group_id = coauthor_group_id
+        # Track uploads for which Coauthor access has been verified.
+        self._coauthor_verified_upload_ids: set[str] = set()
 
+    def _ensure_coauthor_access(self, upload_id: str) -> None:
+        """
+        Ensure the configured NOMAD group has coauthor access.
+
+        Failed attempts are logged and retried during subsequent
+        experiment scans. They do not invalidate a successfully
+        created NOMAD upload.
+        """
+
+        if self.nomad_uploader is None:
+            return
+
+        if not self.coauthor_group_id:
+            return
+
+        if upload_id in self._coauthor_verified_upload_ids:
+            return
+
+        try:
+            self.nomad_uploader.ensure_coauthor_group(
+                upload_id=upload_id,
+                group_id=self.coauthor_group_id,
+            )
+
+            self._coauthor_verified_upload_ids.add(upload_id)
+
+            logger.info(
+                "Coauthor access verified for NOMAD upload %s.",
+                upload_id,
+            )
+
+        except Exception:
+            logger.exception(
+                "Could not assign coauthor access to NOMAD upload %s. "
+                "The watcher will retry during a future scan.",
+                upload_id,
+            )
     def _ensure_nomad_upload(self, experiment: dict) -> None:
         """Create one NOMAD upload for a registered experiment, if needed."""
         experiment_uuid = experiment["experiment_uuid"]
         experiment_id = experiment["experiment_id"]
 
         if experiment.get("nomad_upload_id"):
+            self._ensure_coauthor_access(
+                experiment["nomad_upload_id"]
+            )
             return
 
         if self.nomad_uploader is None:
@@ -98,6 +142,8 @@ class ExperimentManager:
                 "NOMAD upload created for %s. Upload ID saved locally.",
                 experiment_id,
             )
+            # Assign coauthor access immediately after upload creation.
+            self._ensure_coauthor_access(upload_id)
 
         except Exception as error:
             self.database.update_nomad_upload_state(

@@ -138,7 +138,7 @@ class NomadUploader:
 
 
     # ---------------------------------------------------------
-    # Share upload with a reviewer group
+    # Share upload with a coauthor group
     # ---------------------------------------------------------
 
     def add_reviewer_group(
@@ -146,89 +146,10 @@ class NomadUploader:
         upload_id: str,
         group_id: str,
     ) -> dict:
-        """
-        Add a NOMAD user group as a reviewer of an upload.
-
-        Existing reviewer groups are preserved.
-        Repeated calls are safe.
-        """
-
-        upload_id = self._validate_upload_id(upload_id)
-
-        if not isinstance(group_id, str) or not group_id.strip():
-            raise ValueError("group_id must be a non-empty string.")
-
-        group_id = group_id.strip()
-
-        encoded_upload_id = quote(upload_id, safe="")
-
-        # Retrieve existing upload permissions.
-        current = self.get_upload_information(upload_id)
-
-        upload_data = (
-            current.get("data", current)
-            if isinstance(current, dict)
-            else None
+        """Add a NOMAD user group as a reviewer of an upload."""
+        return self._ensure_upload_group_role(
+            upload_id, group_id, "reviewer_groups", "reviewer"
         )
-
-        if not isinstance(upload_data, dict):
-            raise NomadUploadError(
-                "Unexpected response when retrieving upload metadata."
-            )
-
-        existing_groups = upload_data.get("reviewer_groups") or []
-
-        if not isinstance(existing_groups, list):
-            raise NomadUploadError(
-                "Unexpected reviewer_groups format in NOMAD response."
-            )
-
-        # Avoid adding the same group more than once.
-        if group_id in existing_groups:
-            self.logger.info(
-                "Reviewer group already assigned to upload %s",
-                upload_id,
-            )
-            return current
-
-        updated_groups = list(existing_groups)
-        updated_groups.append(group_id)
-
-        # Update upload-level metadata.
-        response = self.client.request(
-            method="POST",
-            endpoint=f"/uploads/{encoded_upload_id}/edit",
-            json={
-                "metadata": {
-                    "reviewer_groups": updated_groups,
-                }
-            },
-        )
-
-        # Verify the group assignment.
-        updated = self.get_upload_information(upload_id)
-
-        updated_data = (
-            updated.get("data", updated)
-            if isinstance(updated, dict)
-            else None
-        )
-
-        if (
-            not isinstance(updated_data, dict)
-            or group_id not in (updated_data.get("reviewer_groups") or [])
-        ):
-            raise NomadUploadError(
-                f"Could not verify reviewer group assignment "
-                f"for upload {upload_id}."
-            )
-
-        self.logger.info(
-            "Reviewer group successfully assigned to upload %s",
-            upload_id,
-        )
-
-        return response
 
     # ---------------------------------------------------------
     # Verify uploaded file
@@ -365,20 +286,43 @@ class NomadUploader:
 
 
     # ---------------------------------------------------------
-    # Ensure a group has reviewer access to an upload
+    # Ensure a group has coauthor access to an upload
     # ---------------------------------------------------------
+
+    def ensure_coauthor_group(
+        self,
+        upload_id: str,
+        group_id: str,
+    ) -> dict:
+        """
+        Ensure that a NOMAD group has coauthor access to an upload.
+
+        Existing coauthor groups are preserved.
+        Repeated calls do not add duplicate groups.
+        """
+
+        return self._ensure_upload_group_role(
+            upload_id, group_id, "coauthor_groups", "coauthor"
+        )
 
     def ensure_reviewer_group(
         self,
         upload_id: str,
         group_id: str,
     ) -> dict:
-        """
-        Ensure that a NOMAD group has reviewer access to an upload.
+        """Ensure that a NOMAD group has reviewer access to an upload."""
+        return self._ensure_upload_group_role(
+            upload_id, group_id, "reviewer_groups", "reviewer"
+        )
 
-        Existing reviewer groups are preserved.
-        Repeated calls do not add duplicate groups.
-        """
+    def _ensure_upload_group_role(
+        self,
+        upload_id: str,
+        group_id: str,
+        metadata_field: str,
+        role_name: str,
+    ) -> dict:
+        """Add and verify a group in one of NOMAD's upload role fields."""
 
         upload_id = self._validate_upload_id(upload_id)
 
@@ -402,27 +346,29 @@ class NomadUploader:
                 "NOMAD upload response does not contain valid data."
             )
 
-        existing_groups = upload_data.get("reviewer_groups") or []
+        existing_groups = upload_data.get(metadata_field) or []
 
         if not isinstance(existing_groups, list):
             raise NomadUploadError(
-                "Unexpected reviewer_groups format in NOMAD response."
+                f"Unexpected {metadata_field} format in NOMAD response."
             )
 
         # Already shared: no update is necessary.
         if group_id in existing_groups:
             self.logger.info(
-                "Reviewer group already assigned to upload %s.",
+                "%s group already assigned to upload %s.",
+                role_name.title(),
                 upload_id,
             )
             return current
 
-        # Preserve all existing reviewer groups.
+        # Preserve all existing groups with this role.
         updated_groups = list(existing_groups)
         updated_groups.append(group_id)
 
         self.logger.info(
-            "Assigning reviewer group to NOMAD upload %s.",
+            "Assigning %s group to NOMAD upload %s.",
+            role_name,
             upload_id,
         )
 
@@ -431,7 +377,7 @@ class NomadUploader:
             endpoint=f"/uploads/{quote(upload_id, safe='')}/edit",
             json={
                 "metadata": {
-                    "reviewer_groups": updated_groups,
+                    metadata_field: updated_groups,
                 }
             },
         )
@@ -451,16 +397,17 @@ class NomadUploader:
                 "Unexpected upload metadata after permission update."
             )
 
-        confirmed_groups = updated_data.get("reviewer_groups") or []
+        confirmed_groups = updated_data.get(metadata_field) or []
 
         if group_id not in confirmed_groups:
             raise NomadUploadError(
-                "NOMAD did not confirm reviewer group assignment "
+                f"NOMAD did not confirm {role_name} group assignment "
                 f"for upload {upload_id}."
             )
 
         self.logger.info(
-            "Reviewer group successfully assigned to upload %s.",
+            "%s group successfully assigned to upload %s.",
+            role_name.title(),
             upload_id,
         )
 

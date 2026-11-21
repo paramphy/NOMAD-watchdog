@@ -53,7 +53,7 @@ class ArchiveManager:
         stability_period_seconds: float = 60,
         compression_level: int = 6,
         uploader=None,
-        reviewer_group_id: str | None = None,
+        coauthor_group_id: str | None = None,
     ):
         self.database = database
 
@@ -75,10 +75,10 @@ class ArchiveManager:
 
         self.uploader = uploader
 
-        self.reviewer_group_id = (
-            reviewer_group_id.strip()
-            if isinstance(reviewer_group_id, str)
-            and reviewer_group_id.strip()
+        self.coauthor_group_id = (
+            coauthor_group_id.strip()
+            if isinstance(coauthor_group_id, str)
+            and coauthor_group_id.strip()
             else None
         )
 
@@ -481,25 +481,25 @@ class ArchiveManager:
         upload_id: str,
     ) -> None:
         """
-        Ensure the configured research group has reviewer access
+        Ensure the configured research group has coauthor access
         to the specified NOMAD upload.
         """
 
-        if not self.reviewer_group_id:
+        if not self.coauthor_group_id:
             return
 
         if upload_id in self._shared_upload_ids:
             return
 
-        self.uploader.ensure_reviewer_group(
+        self.uploader.ensure_coauthor_group(
             upload_id=upload_id,
-            group_id=self.reviewer_group_id,
+            group_id=self.coauthor_group_id,
         )
 
         self._shared_upload_ids.add(upload_id)
 
         logger.info(
-            "Group reviewer access verified for upload %s.",
+            "Group coauthor access verified for upload %s.",
             upload_id,
         )
     # ------------------------------------------------------------------
@@ -603,22 +603,6 @@ class ArchiveManager:
                 return
 
             # ------------------------------------------------------
-            # 4. Skip an already verified identical archive
-            # ------------------------------------------------------
-
-            #if (
-            #    state.get("upload_status") == "UPLOADED"
-            #    and state.get("uploaded_checksum")
-            #    == current_checksum
-            #):
-            #    logger.debug(
-            #        "Archive is already uploaded and verified. "
-            #        "Skipping: %s",
-            #        archive_path.name,
-            #    )
-            #    return
-
-            # ------------------------------------------------------
             # 5. Retrieve experiment
             # ------------------------------------------------------
 
@@ -651,6 +635,31 @@ class ArchiveManager:
                     "Archive upload is deferred until experiment discovery "
                     "successfully creates the upload.",
                     experiment_id,
+                )
+                return
+
+            # Ensure access before uploading the archive. This also runs
+            # for previously uploaded archives, so a failed group assignment
+            # can be retried on a later scan without retransferring the file.
+            try:
+                self.ensure_upload_group_access(upload_id)
+            except Exception:
+                logger.exception(
+                    "Could not assign coauthor group to NOMAD upload %s. "
+                    "This archive will be retried during a future scan.",
+                    upload_id,
+                )
+                return
+
+            # Skip the transfer only after confirming the configured group
+            # has access (when sharing is enabled).
+            if (
+                state.get("upload_status") == "UPLOADED"
+                and state.get("uploaded_checksum") == current_checksum
+            ):
+                logger.debug(
+                    "Archive is already uploaded and verified. Skipping: %s",
+                    archive_path.name,
                 )
                 return
 
@@ -723,35 +732,6 @@ class ArchiveManager:
                 experiment_id,
                 measurement_type,
             )
-
-            # ------------------------------------------------------
-            # Ensure research group has access before uploading
-            # ------------------------------------------------------
-
-            try:
-                self.ensure_upload_group_access(upload_id)
-
-            except Exception:
-                logger.exception(
-                    "Could not assign reviewer group to NOMAD upload %s. "
-                    "This archive will be retried during a future scan.",
-                    upload_id,
-                )
-                return
-
-            # ------------------------------------------------------
-            # Skip an already verified identical archive
-            # ------------------------------------------------------
-            
-            if (
-                state.get("upload_status") == "UPLOADED"
-                and state.get("uploaded_checksum") == current_checksum
-            ):
-                logger.debug(
-                    "Archive is already uploaded and verified. Skipping: %s",
-                    archive_path.name,
-                )
-                return
 
         except Exception as error:
             # Upload errors must not stop local archive monitoring.

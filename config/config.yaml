@@ -9,10 +9,10 @@ monitoring:
   experimental_data_directory: "Experimental_Data"
 
   # Periodic scan interval in seconds.
-  scan_interval_seconds: 30
+  scan_interval_seconds: 60
 
   # Whether to monitor filesystem events.
-  use_filesystem_events: true
+  use_filesystem_events: false
 
 database:
   # Stored locally on the computer running the watcher.
@@ -81,4 +81,4 @@ nomad:
     enabled: true
 
     # Automated Materials Exploration - Uppsala
-    reviewer_group_id: "XkD92ekBRHyPLX8vD3gPdA"
+    coauthor_group_id: "XkD92ekBRHyPLX8vD3gPdA"

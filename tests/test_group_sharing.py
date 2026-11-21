@@ -154,9 +154,9 @@ def find_upload_id(data, target_id: str) -> bool:
     return False
 
 
-def extract_reviewer_groups(response) -> list[str] | None:
+def extract_coauthor_groups(response) -> list[str] | None:
     """
-    Extract reviewer_groups from common NOMAD response layouts.
+    Extract coauthor_groups from common NOMAD response layouts.
     """
 
     if not isinstance(response, dict):
@@ -172,7 +172,7 @@ def extract_reviewer_groups(response) -> list[str] | None:
     if not isinstance(metadata, dict):
         return None
 
-    groups = metadata.get("reviewer_groups")
+    groups = metadata.get("coauthor_groups")
 
     if groups is None:
         return []
@@ -190,7 +190,7 @@ def extract_reviewer_groups(response) -> list[str] | None:
 def main():
 
     parser = argparse.ArgumentParser(
-        description="Test NOMAD reviewer-group sharing."
+        description="Test NOMAD coauthor-group sharing."
     )
 
     parser.add_argument(
@@ -211,7 +211,7 @@ def main():
     try:
 
         logger.info("=" * 60)
-        logger.info("Testing NOMAD group sharing")
+        logger.info("Testing NOMAD coauthor-group sharing")
         logger.info("=" * 60)
 
         # ----------------------------------------------------
@@ -224,7 +224,7 @@ def main():
         logger.info("API base URL: %s", base_url)
         logger.info("Upload ID: %s", upload_id)
         logger.info("Upload ID length: %d", len(upload_id))
-        logger.info("Reviewer group ID: %s", GROUP_ID)
+        logger.info("Coauthor group ID: %s", GROUP_ID)
 
         # ----------------------------------------------------
         # 2. Initialize NOMAD client
@@ -354,67 +354,67 @@ def main():
         logger.info("Upload successfully retrieved.")
 
         # ----------------------------------------------------
-        # 8. Check current reviewer groups
+        # 8. Check current coauthor groups
         # ----------------------------------------------------
 
-        existing_groups = extract_reviewer_groups(
+        existing_groups = extract_coauthor_groups(
             upload_information
         )
 
         if existing_groups is None:
             logger.warning(
-                "Could not identify reviewer_groups in the "
+                "Could not identify coauthor_groups in the "
                 "upload response. The sharing method will still "
                 "perform its own metadata check."
             )
         else:
             logger.info(
-                "Current reviewer groups: %s",
+                "Current coauthor groups: %s",
                 existing_groups,
             )
 
         # ----------------------------------------------------
-        # 9. Assign reviewer group
+        # 9. Assign coauthor group
         # ----------------------------------------------------
 
         logger.info(
-            "Assigning reviewer access to the Uppsala group..."
+            "Assigning coauthor access to the Uppsala group..."
         )
 
-        uploader.ensure_reviewer_group(
+        uploader.ensure_coauthor_group(
             upload_id=upload_id,
             group_id=GROUP_ID,
         )
 
         # ----------------------------------------------------
-        # 10. Verify assignment
+        # 10. Verify coauthor assignment
         # ----------------------------------------------------
 
         logger.info(
-            "Checking reviewer-group assignment..."
+            "Checking coauthor-group assignment..."
         )
 
         updated_information = uploader.get_upload_information(
             upload_id
         )
 
-        updated_groups = extract_reviewer_groups(
+        updated_groups = extract_coauthor_groups(
             updated_information
         )
 
         if updated_groups is None:
             raise RuntimeError(
-                "Could not verify reviewer_groups in the "
+                "Could not verify coauthor_groups in the "
                 "updated NOMAD upload response."
             )
 
         if GROUP_ID not in updated_groups:
             raise RuntimeError(
-                "NOMAD did not confirm the reviewer-group assignment."
+                "NOMAD did not confirm the coauthor-group assignment."
             )
 
         logger.info("=" * 60)
-        logger.info("GROUP SHARING TEST SUCCESSFUL")
+        logger.info("GROUP COAUTHOR TEST SUCCESSFUL")
         logger.info("=" * 60)
 
         logger.info(
@@ -423,12 +423,12 @@ def main():
         )
 
         logger.info(
-            "Reviewer group successfully assigned: %s",
+            "Coauthor group successfully assigned: %s",
             GROUP_ID,
         )
 
         logger.info(
-            "Confirmed reviewer groups: %s",
+            "Confirmed coauthor groups: %s",
             updated_groups,
         )
 
