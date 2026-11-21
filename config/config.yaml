@@ -1,4 +1,3 @@
-
 # NOMAD Experiment Watcher Configuration
 
 application:
@@ -58,8 +57,28 @@ archive:
 
 
 nomad:
+  # Full NOMAD REST API base URL. Update this if the Cloudflare tunnel changes.
+  # Do not put the PAT in this file.
+  base_url: "https://handbook-tuning-cleaner-smtp.trycloudflare.com/nomad-oasis/api/v1"
+
+  # Secret is read from this environment variable in the local .env file.
+  env_file: ".env"
+  token_env_var: "NOMAD_PAT"
+
+  request_timeout_seconds: 1800
+  verify_ssl: true
+
+  # Retry upload creation after transient API/network failures.
+  upload_retry_interval_seconds: 300
+
   upload_verification:
     enabled: true
     initial_delay_seconds: 2
     retry_interval_seconds: 3
-    timeout_seconds: 60
+    timeout_seconds: 600
+
+  sharing:
+    enabled: true
+
+    # Automated Materials Exploration - Uppsala
+    reviewer_group_id: "XkD92ekBRHyPLX8vD3gPdA"

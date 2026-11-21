@@ -5,11 +5,11 @@ folders, managing experiment metadata, generating measurement-specific
 archives, and incrementally transferring experimental data to a remote
 NOMAD Oasis server.
 
-> **Current milestone:** Phase 1 --- local experiment discovery,
-> metadata management, SQLite state tracking, and automatic archive
-> generation --- is working.\
-> **Next milestone:** Phase 2 --- verify communication with the remote
-> NOMAD Oasis API. Development will proceed incrementally.
+> **Current milestone:** Local discovery, metadata management, SQLite
+> tracking, archive generation, NOMAD upload creation, incremental file
+> upload, remote verification, and manifest synchronisation are implemented.
+> **Next milestone:** NOMAD processing, entry retrieval, and scientific
+> parser validation. Development will proceed incrementally.
 
 ## 1. Project goals
 
@@ -54,6 +54,47 @@ is intended to use HTTPS REST APIs.
 -   **Incremental development:** each phase is implemented and tested
     before proceeding.
 
+## NOMAD connection and secret configuration
+
+The NOMAD REST API base URL is configured in `config/config.yaml`:
+
+```yaml
+nomad:
+  base_url: "https://YOUR-NOMAD-HOST/nomad-oasis/api/v1"
+  env_file: ".env"
+  token_env_var: "NOMAD_PAT"
+```
+
+The PAT must **not** be stored in `config.yaml` or committed to Git.
+The local `.env` file is plain text (not encrypted), so protect it with
+your Windows account permissions. For a managed deployment, use Windows
+Credential Manager or another OS secret store instead.
+
+For local development:
+
+1. Copy `.env.example` to `.env` in the project root.
+2. Put the PAT in `.env`:
+
+   ```dotenv
+   NOMAD_PAT=your_personal_access_token
+   ```
+
+3. Keep `.env` private. It is excluded by `.gitignore`.
+4. Install updated dependencies with `pip install -e .`.
+5. Restart the watcher.
+
+The application loads `.env` at startup. A PAT already supplied through
+the Windows environment takes precedence over the `.env` value. Do not
+paste the PAT into source code, logs, chat, or a shared configuration file.
+
+The `base_url` value must include the NOMAD API path
+`/nomad-oasis/api/v1`. If a Cloudflare Quick Tunnel URL changes, update
+this value in `config/config.yaml`.
+
+When NOMAD credentials are unavailable, local discovery and archive
+generation continue, but remote upload creation and file transfer are
+disabled. After credentials are configured, restart the watcher.
+
 ## 3. Current project structure
 
 The structure below reflects the architecture developed so far. Some
@@ -94,8 +135,7 @@ nomad-experiment-watcher/
 └── tests/
 ```
 
-Future NOMAD integration is expected to be separated into its own
-package:
+NOMAD integration is separated into its own package:
 
 ``` text
 src/nomad_experiment_watcher/nomad/
@@ -105,7 +145,8 @@ src/nomad_experiment_watcher/nomad/
 └── processor.py
 ```
 
-These NOMAD modules are planned, not yet implemented.
+The client and uploader are implemented. Processing and entry-to-measurement
+association remain future work.
 
 ## 4. Experimental data layout
 
@@ -286,27 +327,33 @@ hashing large files into account.
 
 ### Phase 2 --- NOMAD communication and incremental upload
 
-**Status: Not started.**
+**Status: Implemented; live end-to-end operation still requires validation
+with the current configured server tunnel and local PAT.**
 
-The first task is to inspect and test the deployed NOMAD Oasis API. The
-first implementation should be a small authenticated connection test,
-not a complete uploader.
+The deployed NOMAD Oasis API has been tested for upload creation,
+raw-file transfer, remote path replacement, and file-size verification.
+The watcher now loads the API base URL from `config/config.yaml` and the
+PAT from a local `.env` file.
 
-Planned work:
+Implemented:
+- Configurable NOMAD API base URL and PAT secret loading.
+- One reusable NOMAD upload per experiment, created at discovery.
+- Incremental measurement archive uploads into measurement-specific
+  remote directories.
+- Remote file existence and size verification.
+- Reuse of existing upload IDs after watcher restarts.
+- SQLite-backed upload state and local manifest synchronisation.
+- Publishing remains a manual action.
 
-1.  Confirm the NOMAD server URL and deployed version/API behaviour.
-2.  Authenticate using a Personal Access Token (PAT).
-3.  Test a suitable authenticated endpoint.
-4.  Investigate upload creation.
-5.  Investigate adding and replacing files in an existing upload.
-6.  Investigate triggering processing and checking processing status.
-7.  Retrieve generated entry identifiers.
-8.  Implement retry and recovery behaviour.
-9.  Integrate archive updates with the existing experiment upload.
+Remaining:
+- Trigger and monitor NOMAD processing.
+- Retrieve entry IDs and associate them with measurement types.
+- Validate parser output against real experiment archives.
 
-The PAT must not be committed to source control or stored in a
-plain-text project configuration file. Use an appropriate secret store
-or environment variable.
+The PAT must not be committed to source control or stored in
+`config.yaml`. The local `.env` file is a plain-text development secret;
+protect it with Windows file permissions. Use an OS secret store for a
+managed deployment.
 
 The intended policy is to keep uploads unpublished initially. Publishing
 remains a manual action.

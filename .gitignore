@@ -13,5 +13,11 @@ logs/
 *.log
 
 .env
+.env.*
+!.env.example
 .vscode/
 .idea/
+
+Experimental_Data/*
+archive_cache/*
+- composition maps from sputter.txt

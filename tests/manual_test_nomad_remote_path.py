@@ -2,13 +2,15 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from nomad_experiment_watcher.nomad.client import NomadClient
+from nomad_experiment_watcher.nomad.configured_client import (
+    create_configured_client,
+)
 from nomad_experiment_watcher.nomad.uploader import NomadUploader
 
 
 def main():
 
-    client = NomadClient()
+    config, client = create_configured_client()
 
     try:
 

@@ -53,6 +53,7 @@ class ArchiveManager:
         stability_period_seconds: float = 60,
         compression_level: int = 6,
         uploader=None,
+        reviewer_group_id: str | None = None,
     ):
         self.database = database
 
@@ -73,6 +74,17 @@ class ArchiveManager:
         self.compression_level = int(compression_level)
 
         self.uploader = uploader
+
+        self.reviewer_group_id = (
+            reviewer_group_id.strip()
+            if isinstance(reviewer_group_id, str)
+            and reviewer_group_id.strip()
+            else None
+        )
+
+        # Remember uploads whose group permissions were verified
+        # during this application session.
+        self._shared_upload_ids = set()
 
         if self.quiet_period_seconds < 0:
             raise ValueError(
@@ -464,7 +476,32 @@ class ArchiveManager:
                         "Could not remove temporary archive: %s",
                         temporary_path,
                     )
+    def ensure_upload_group_access(
+        self,
+        upload_id: str,
+    ) -> None:
+        """
+        Ensure the configured research group has reviewer access
+        to the specified NOMAD upload.
+        """
 
+        if not self.reviewer_group_id:
+            return
+
+        if upload_id in self._shared_upload_ids:
+            return
+
+        self.uploader.ensure_reviewer_group(
+            upload_id=upload_id,
+            group_id=self.reviewer_group_id,
+        )
+
+        self._shared_upload_ids.add(upload_id)
+
+        logger.info(
+            "Group reviewer access verified for upload %s.",
+            upload_id,
+        )
     # ------------------------------------------------------------------
     # NOMAD UPLOAD MANAGEMENT
     # ------------------------------------------------------------------
@@ -569,17 +606,17 @@ class ArchiveManager:
             # 4. Skip an already verified identical archive
             # ------------------------------------------------------
 
-            if (
-                state.get("upload_status") == "UPLOADED"
-                and state.get("uploaded_checksum")
-                == current_checksum
-            ):
-                logger.debug(
-                    "Archive is already uploaded and verified. "
-                    "Skipping: %s",
-                    archive_path.name,
-                )
-                return
+            #if (
+            #    state.get("upload_status") == "UPLOADED"
+            #    and state.get("uploaded_checksum")
+            #    == current_checksum
+            #):
+            #    logger.debug(
+            #        "Archive is already uploaded and verified. "
+            #        "Skipping: %s",
+            #        archive_path.name,
+            #    )
+            #    return
 
             # ------------------------------------------------------
             # 5. Retrieve experiment
@@ -605,37 +642,17 @@ class ArchiveManager:
             )
 
             # ------------------------------------------------------
-            # 6. Create one NOMAD upload if needed
+            # 6. Require the upload created during experiment discovery
             # ------------------------------------------------------
 
             if not upload_id:
-                logger.info(
-                    "Creating NOMAD upload for experiment %s",
+                logger.warning(
+                    "NOMAD upload ID is not available for experiment %s. "
+                    "Archive upload is deferred until experiment discovery "
+                    "successfully creates the upload.",
                     experiment_id,
                 )
-
-                upload_id = self.uploader.create_upload(
-                    upload_name=experiment_id,
-                    auto_decompress=False,
-                )
-
-                if not upload_id or not isinstance(upload_id, str):
-                    raise RuntimeError(
-                        "NOMAD uploader did not return a valid "
-                        "upload ID."
-                    )
-
-                # Persist immediately so subsequent measurement
-                # types reuse this upload.
-                self.database.set_nomad_upload_id(
-                    experiment_uuid=experiment_uuid,
-                    upload_id=upload_id,
-                )
-
-                logger.info(
-                    "NOMAD upload ID saved for experiment %s",
-                    experiment_id,
-                )
+                return
 
             # ------------------------------------------------------
             # 7. Mark upload as started
@@ -706,6 +723,35 @@ class ArchiveManager:
                 experiment_id,
                 measurement_type,
             )
+
+            # ------------------------------------------------------
+            # Ensure research group has access before uploading
+            # ------------------------------------------------------
+
+            try:
+                self.ensure_upload_group_access(upload_id)
+
+            except Exception:
+                logger.exception(
+                    "Could not assign reviewer group to NOMAD upload %s. "
+                    "This archive will be retried during a future scan.",
+                    upload_id,
+                )
+                return
+
+            # ------------------------------------------------------
+            # Skip an already verified identical archive
+            # ------------------------------------------------------
+            
+            if (
+                state.get("upload_status") == "UPLOADED"
+                and state.get("uploaded_checksum") == current_checksum
+            ):
+                logger.debug(
+                    "Archive is already uploaded and verified. Skipping: %s",
+                    archive_path.name,
+                )
+                return
 
         except Exception as error:
             # Upload errors must not stop local archive monitoring.

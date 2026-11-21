@@ -1,4 +1,0 @@
-NOMAD Experiment Watcher test upload
-Experiment: Cu_186
-Measurement: Test
-Purpose: Verify raw file transfer to NOMAD.

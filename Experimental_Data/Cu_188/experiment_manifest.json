@@ -5,9 +5,11 @@
     "experiment_id": "Cu_188",
     "experiment_uuid": "6048f812-7d6b-4c9c-b120-aee0eb9c1037",
     "nomad": {
-        "upload_id": null,
-        "upload_status": "NOT_CREATED",
-        "processing_status": "NOT_STARTED"
+        "upload_id": "_PMW3-0-R3azS_KXfrOI7A",
+        "upload_status": "UPLOADED",
+        "processing_status": "NOT_STARTED",
+        "upload_error": null,
+        "last_upload_attempt": null
     },
     "experiment_status": "DISCOVERED",
     "expected_measurements": [
@@ -18,28 +20,53 @@
     ],
     "measurements": {
         "RTP": {
-            "detected": false,
-            "uploaded": false,
+            "detected": true,
+            "uploaded": true,
             "processed": false,
-            "entry_id": null
+            "entry_id": null,
+            "upload_status": "UPLOADED",
+            "source_file_count": 1,
+            "archive_status": "GENERATED",
+            "archive_path": "C:\\Users\\parch602\\Desktop\\nomad-experiment-watcher\\archive_cache\\Cu_188\\Cu_188.rtpzip",
+            "last_uploaded": "2026-11-20T19:56:07.212574+00:00",
+            "upload_error": null
         },
         "XRD": {
             "detected": false,
             "uploaded": false,
             "processed": false,
-            "entry_id": null
+            "entry_id": null,
+            "upload_status": "NOT_DETECTED",
+            "source_file_count": 0,
+            "archive_status": "NOT_CREATED",
+            "archive_path": null,
+            "last_uploaded": null,
+            "upload_error": null
         },
         "Sulfurization": {
             "detected": false,
             "uploaded": false,
             "processed": false,
-            "entry_id": null
+            "entry_id": null,
+            "upload_status": "NOT_DETECTED",
+            "source_file_count": 0,
+            "archive_status": "NOT_CREATED",
+            "archive_path": null,
+            "last_uploaded": null,
+            "upload_error": null
         },
         "Hyperspectral": {
             "detected": false,
             "uploaded": false,
             "processed": false,
-            "entry_id": null
+            "entry_id": null,
+            "upload_status": "NOT_DETECTED",
+            "source_file_count": 0,
+            "archive_status": "NOT_CREATED",
+            "archive_path": null,
+            "last_uploaded": null,
+            "upload_error": null
         }
-    }
+    },
+    "updated_at": "2026-11-20T19:56:08.366140+00:00"
 }

@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 src/nomad_experiment_watcher/config.py
 src/nomad_experiment_watcher/database.py
@@ -8,7 +9,17 @@ src/nomad_experiment_watcher.egg-info/dependency_links.txt
 src/nomad_experiment_watcher.egg-info/requires.txt
 src/nomad_experiment_watcher.egg-info/top_level.txt
 src/nomad_experiment_watcher/experiments/__init__.py
+src/nomad_experiment_watcher/experiments/archive_manager.py
 src/nomad_experiment_watcher/experiments/manager.py
 src/nomad_experiment_watcher/experiments/metadata.py
 src/nomad_experiment_watcher/monitoring/__init__.py
 src/nomad_experiment_watcher/monitoring/folder_monitor.py
+src/nomad_experiment_watcher/nomad/__init__.py
+src/nomad_experiment_watcher/nomad/client.py
+src/nomad_experiment_watcher/nomad/configured_client.py
+src/nomad_experiment_watcher/nomad/test_nomad_client.py
+src/nomad_experiment_watcher/nomad/test_nomad_uploader.py
+src/nomad_experiment_watcher/nomad/test_upload_file.py
+src/nomad_experiment_watcher/nomad/uploader.py
+tests/test_get.py
+tests/test_nomad_connection.py

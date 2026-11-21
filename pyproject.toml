@@ -11,7 +11,8 @@ requires-python = ">=3.11"
 dependencies = [
     "watchdog>=4.0",
     "PyYAML>=6.0",
-    "requests"
+    "requests",
+    "python-dotenv>=1.0"
 ]
 
 [project.optional-dependencies]

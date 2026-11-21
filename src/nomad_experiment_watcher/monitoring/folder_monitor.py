@@ -108,10 +108,12 @@ class FolderMonitor:
                 # Automatically generate/update measurement archives.
 
                 if self.archive_manager:
+                    self.archive_manager.scan_experiment(directory)
 
-                    self.archive_manager.scan_experiment(
-                        directory
-                    )
+                # The manifest is a local, human-readable projection
+                # of the authoritative SQLite state. This updates it
+                # immediately after source detection and upload attempts.
+                self.experiment_manager.synchronize_manifest(directory)
 
             except Exception:
 
