@@ -5,11 +5,11 @@
     "experiment_id": "Cu_187",
     "experiment_uuid": "e7247d5e-9ca6-46ef-a7b9-4c966c32114d",
     "nomad": {
-        "upload_id": "CWhKPaasQDmTSga7VKiobw",
+        "upload_id": "F67Jk7LsRuGnkPDepikn1A",
         "upload_status": "UPLOADED",
         "processing_status": "NOT_STARTED",
-        "upload_error": null,
-        "last_upload_attempt": null
+        "upload_error": "'ExperimentManager' object has no attribute '_coauthor_verified_upload_ids'",
+        "last_upload_attempt": "2026-11-21T18:13:25.201226+00:00"
     },
     "experiment_status": "DISCOVERED",
     "expected_measurements": [
@@ -28,7 +28,7 @@
             "source_file_count": 1,
             "archive_status": "GENERATED",
             "archive_path": "C:\\Users\\parch602\\Desktop\\nomad-experiment-watcher\\archive_cache\\Cu_187\\Cu_187.rtpzip",
-            "last_uploaded": "2026-11-20T19:56:03.398081+00:00",
+            "last_uploaded": "2026-11-21T18:13:28.307109+00:00",
             "upload_error": null
         },
         "XRD": {
@@ -68,5 +68,5 @@
             "upload_error": null
         }
     },
-    "updated_at": "2026-11-20T19:56:04.272150+00:00"
+    "updated_at": "2026-11-22T09:05:11.693295+00:00"
 }
